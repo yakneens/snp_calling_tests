@@ -28,6 +28,6 @@ pfiles = PileupFiles("~/data/snp_calling_tests/inputs/CEUTrio.HiSeq.WGS.b37.NA12
 res = applyPileups(files = pfiles, pileup_fun, param=aparam)
 
 pparam = PileupParam()
-x = pileup("~/data/snp_calling_tests/inputs/CEUTrio.HiSeq.WGS.b37.NA12878.20.10000758.05.bam", scanBamParam = param)
+x = pileup("~/data/snp_calling_tests/inputs/CEUTrio.HiSeq.WGS.b37.NA12878.20.10000758.20.bam", scanBamParam = param)
 
 aln = readGAlignments(file = "~/data/snp_calling_tests/inputs/CEUTrio.HiSeq.WGS.b37.NA12878.20.10000758.20.bam")
