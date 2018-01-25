@@ -66,40 +66,43 @@ def call_variants(input_file,
             lgl_2 = 0.0
         
         alt = None
-        
+        read_ids = []
         for cur_read in el.pileups:
             if not cur_read.is_del:
                 aln = cur_read.alignment
-                loc = cur_read.query_position
-                #print loc
-                base = aln.seq[loc]
-                qual = aln.query_qualities[loc]
                 
-                p_error = from_phred(qual)
-          
-                gl_1 = gl_1 * 0.5
-                
-                if use_log: 
-                    log_10_of_half = -0.301029995663981
-                    lgl_1 = lgl_1 + log_10_of_half
-                       
-                if(base == ref[ref_ind]):
-                    gl_0 = gl_0 * p_error
-                    gl_2 = gl_2 * (1 - p_error)
+                if not aln.is_duplicate and not aln.is_qcfail and aln.mapping_quality > 0:
+                    read_ids.append(aln.qname)
+                    loc = cur_read.query_position
+                    #print loc
+                    base = aln.seq[loc]
+                    qual = aln.query_qualities[loc]
                     
-                    if use_log:
-                        lgl_0 = lgl_0 + (-qual / 10)
-                        lgl_2 = lgl_2 + (-to_phred(1-p_error)/10)
-                else:
-                    alt = base
-                    gl_2 = gl_2 * p_error
-                    gl_0 = gl_0 * (1 - p_error)
+                    p_error = from_phred(qual)
+              
+                    gl_1 = gl_1 * 0.5
                     
-                    if use_log:
-                        lgl_2 = lgl_2 + (-qual / 10)
-                        lgl_0 = lgl_0 + (-to_phred(1-p_error)/10)
-                
-                #my_snp.append((aln.seq[loc], aln.query_qualities[loc]))
+                    if use_log: 
+                        log_10_of_half = -0.301029995663981
+                        lgl_1 = lgl_1 + log_10_of_half
+                           
+                    if(base == ref[ref_ind]):
+                        gl_0 = gl_0 * p_error
+                        gl_2 = gl_2 * (1 - p_error)
+                        
+                        if use_log:
+                            lgl_0 = lgl_0 + (-qual / 10)
+                            lgl_2 = lgl_2 + (-to_phred(1-p_error)/10)
+                    else:
+                        alt = base
+                        gl_2 = gl_2 * p_error
+                        gl_0 = gl_0 * (1 - p_error)
+                        
+                        if use_log:
+                            lgl_2 = lgl_2 + (-qual / 10)
+                            lgl_0 = lgl_0 + (-to_phred(1-p_error)/10)
+                    
+                    #my_snp.append((aln.seq[loc], aln.query_qualities[loc]))
             
             
         norm_const = prior_0 * gl_0 + prior_1 * gl_1 + prior_2 * gl_2
@@ -145,6 +148,7 @@ def call_variants(input_file,
             #print pos
             if print_results:
                 print rec
+                #print read_ids
                 
             f.write(str(rec))
             
@@ -154,9 +158,20 @@ def call_variants(input_file,
     print len(my_snp)
     return my_snp
 
-my_start = 1
-my_stop = 10140159
+#my_start = 1
+#my_stop = 10140159
+my_start = 10000000
+my_stop = 10001000
 my_chr = "20"
+
+# call_variants("/Users/siakhnin/data/CEUTrio.HiSeq.WGS.b37.NA12878.20.21.bam", 
+#               "/Users/siakhnin/data/human_g1k_v37.20.21.fasta", 
+#               '/Users/siakhnin/data/blah.txt', 
+#               my_start,
+#               my_stop,
+#               my_chr, 
+#               use_log=False,
+#               print_results=True)
 
 def call_with_log():
     print(call_variants("/Users/siakhnin/data/CEUTrio.HiSeq.WGS.b37.NA12878.20.21.bam", 
@@ -166,7 +181,7 @@ def call_with_log():
               my_stop,
               my_chr, 
               use_log=True,
-              print_results=False))
+              print_results=True))
 
 def call_no_log():
     print(call_variants("/Users/siakhnin/data/CEUTrio.HiSeq.WGS.b37.NA12878.20.21.bam", 
@@ -176,7 +191,7 @@ def call_no_log():
               my_stop,
               my_chr, 
               use_log=False,
-              print_results=False))
+              print_results=True))
     
-
-timeit.timeit(call_no_log, number=1)
+print timeit.timeit(call_no_log, number=1)
+print timeit.timeit(call_with_log, number=1)
