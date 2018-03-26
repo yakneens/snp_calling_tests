@@ -49,45 +49,58 @@ def get_priors():
 (prior_0, prior_1, prior_2) = get_priors()
 
 
-def handle_match(read, read_idx, match_len, ref_offset, all_loci):
+def handle_match(read, read_idx, match_len, ref_offset, all_loci, ref, my_start, my_stop):
     
     seq = read.query_alignment_sequence[read_idx:read_idx+match_len]
     qual = read.query_alignment_qualities[read_idx:read_idx+match_len]
-    read_ref = read.get_reference_sequence()[ref_offset:ref_offset+match_len]
+    #read_ref = read.get_reference_sequence()[ref_offset:ref_offset+match_len]
+    ref_start = read.reference_start + ref_offset
+    ref_stop = read.reference_start + ref_offset + match_len
     
-    for i in range(len(seq)):
-        cur = read.pos + read_idx + i
+    if ref_stop < my_start:
+        return
+    else:
+        read_ref = ref[ref_start:ref_stop]
         
-        my_locus = all_loci.get(cur)
-        if not my_locus:
-            my_locus = Locus(pos=cur+1, ref=read_ref[i], alt=None, gl_ref=prior_2, gl_het=prior_1, gl_hom=prior_0, history=[])
+        for i in range(len(seq)):
+            cur = read.pos + read_idx + i
+            cur_ref = ref_start + i
+            
+            if cur_ref < my_start:
+                continue
+            elif cur_ref > my_stop:
+                return
+            else:
+                my_locus = all_loci.get(cur_ref)
+                if not my_locus:
+                    my_locus = Locus(pos=cur_ref+1, ref=ref[cur_ref - my_start], alt=None, gl_ref=prior_2, gl_het=prior_1, gl_hom=prior_0, history=[])
+                
+                p_error = from_phred(qual[i])
+                
+                my_locus.dp += 1
+                
+                my_locus.gl_het *= 0.5
+                
+                if(seq[i] != ref[cur_ref - my_start]):
+                    my_locus.alt = seq[i]
+                    my_locus.gl_ref *= p_error
+                    my_locus.gl_hom *= (1 - p_error)
+                    my_locus.ao += 1
+                    my_locus.qa += qual[i]
         
-        p_error = from_phred(qual[i])
+                else:
+                    my_locus.gl_ref *= (1 - p_error)
+                    my_locus.gl_hom *= p_error
+                    my_locus.ro += 1
+                    my_locus.qr += qual[i]
         
-        my_locus.dp += 1
-        
-        my_locus.gl_het *= 0.5
-        
-        if(seq[i] != read_ref[i]):
-            my_locus.alt = seq[i]
-            my_locus.gl_ref *= p_error
-            my_locus.gl_hom *= (1 - p_error)
-            my_locus.ao += 1
-            my_locus.qa += qual[i]
+                my_locus.add_to_history(my_locus.gl_ref)        
+                
+                all_loci[cur_ref] = my_locus
 
-        else:
-            my_locus.gl_ref *= (1 - p_error)
-            my_locus.gl_hom *= p_error
-            my_locus.ro += 1
-            my_locus.qr += qual[i]
-
-        my_locus.add_to_history(my_locus.gl_ref)        
-        
-        all_loci[cur] = my_locus
 
 
-
-def process_reads(my_reads, all_loci):
+def process_reads(my_reads, all_loci, ref, my_start, my_stop):
     for read in my_reads:
         if not read.is_duplicate and not read.is_qcfail and not read.mapping_quality == 0:
             
@@ -106,7 +119,7 @@ def process_reads(my_reads, all_loci):
                 
                 if el_type == 0 or el_type == 2:
                     if el_type == 0:
-                        handle_match(read, read_idx, el_len, ref_offset, all_loci)
+                        handle_match(read, read_idx, el_len, ref_offset, all_loci, ref, my_start, my_stop)
                     ref_offset += el_len
                 if el_type != 2 and el_type != 4:
                     read_idx += el_len
@@ -128,7 +141,7 @@ def call_variants(input_file,
     all_loci = {}
     my_snp = []
     
-    process_reads(my_reads, all_loci)
+    process_reads(my_reads, all_loci, ref, my_start, my_stop)
     
     for cur_pos in sorted(all_loci):
         cur_locus = all_loci[cur_pos]
@@ -139,7 +152,7 @@ def call_variants(input_file,
             vqual = to_phred(post_ref)
         else:
             vqual = 5000
-            
+ #       print vqual   
         if vqual > 20:   
             res = (cur_pos + 1, 0 if post_hom > post_het else 1, cur_locus.ref, cur_locus.alt, vqual, post_ref, post_het, post_hom)
             my_snp.append(cur_locus)
@@ -152,8 +165,8 @@ def call_test():
     call_variants(my_start = 10000000,
                   my_stop = 10001000,
                   my_chr = "20",
-                  input_file = "/Users/siakhnin/data/CEUTrio.HiSeq.WGS.b37.NA12878.20.21.bam",
-                  reference_file = "/Users/siakhnin/data/human_g1k_v37.20.21.fasta",
+                  input_file = "/Users/siakhnin/data/NA12878.chr20.bam",
+                  reference_file = "/Users/siakhnin/data/genome.fa",
                   output_file = None)
     
 print timeit.timeit(call_test,number=1)
