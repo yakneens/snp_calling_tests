@@ -20,21 +20,9 @@ import functools
 
 redis_cli = redis.Redis(host='localhost',port=6379)
 
-z = [u'HISEQ1:11:H8GV6ADXX:1:1110:9483:49701',
-     u'HWI-D00360:5:H814YADXX:1:2208:1129:93747',
-     u'HWI-D00360:5:H814YADXX:1:1213:19452:64030',
-     u'HWI-D00360:5:H814YADXX:1:1209:12208:98620',
-     u'HISEQ1:12:H8GVUADXX:1:2206:11424:59322',
-     u'HWI-D00360:8:H88U0ADXX:2:1208:10699:74467',
-     u'HISEQ1:9:H8962ADXX:2:1108:6208:16687',
-     u'HISEQ1:9:H8962ADXX:2:2108:9624:93936',
-     u'HWI-D00360:7:H88WKADXX:1:2202:6276:57737',
-     u'HWI-D00360:7:H88WKADXX:2:1208:19783:4676']
-
 SAVED_MSG = "SAVED"
 NEW_MSG = "NEW"
 USE_REDIS = False
-USE_LOCAL = False
 all_loci = {}
 #rev_comp_lookup = string.maketrans(u'ACTG', u'TGAC')
 rev_comp_lookup = {ord(c): ord(t) for c,t in zip(u'ACTG', u'TGAC')}
@@ -83,7 +71,7 @@ def timeit(method):
 
 
 
-def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, shared_all_loci, reads_to_save):
+def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, shared_all_loci):
 
     strand = read['strand']
 
@@ -110,10 +98,6 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, 
 
         for i in range(len(seq)):
             cur_ref = ref_start + i
-
-            if cur_ref == 10098785:
-                reads_to_save.append(read)
-                pass
 
             if cur_ref < my_start:
                 continue
@@ -166,11 +150,8 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, 
                     updated_loci[cur_ref] = my_locus
     return updated_loci
 
-def process_read(read, ref, my_start, my_stop, shared_all_loci, reads_to_save):
+def process_read(read, ref, my_start, my_stop, shared_all_loci):
     updated_loci = {}
-
-    if read['qname'].split("/")[0] in z:
-        pass
 
     strand = read['strand']
 
@@ -192,7 +173,7 @@ def process_read(read, ref, my_start, my_stop, shared_all_loci, reads_to_save):
         #0 is a match, 2 is a deletion, these consume reference sequence
         if el_type == 0 or el_type == 2:
             if el_type == 0:
-                updated_loci.update(handle_match(read, read_idx, el_len, ref_offset, ref, my_start, my_stop, shared_all_loci, reads_to_save))
+                updated_loci.update(handle_match(read, read_idx, el_len, ref_offset, ref, my_start, my_stop, shared_all_loci))
             ref_offset += el_len * strand
         if el_type != 2 and el_type != 4:
             read_idx += el_len
@@ -201,6 +182,7 @@ def process_read(read, ref, my_start, my_stop, shared_all_loci, reads_to_save):
 
 def reverse_neg_strand_read(read):
     return True
+
 
 @timeit
 def save_to_redis(saver_pipe, shared_all_loci):
@@ -212,10 +194,11 @@ def save_to_redis(saver_pipe, shared_all_loci):
         print(msg)
         if msg == NEW_MSG:
             redis_cli = redis.Redis(host='localhost', port=6379)
-            saver_pipe.send(SAVED_MSG)
             for key in shared_all_loci.keys():
                 my_locus = shared_all_loci[key]
                 redis_cli.set(my_locus.pos - 1, jsonpickle.encode(my_locus))
+
+                saver_pipe.send(SAVED_MSG)
         else:
             print("No new messages reported. Not saving to Redis this time.")
     else:
@@ -228,14 +211,8 @@ def save_job(saver_pipe, shared_all_loci):
 
 
 def process_messages(processor_pipe, shared_all_loci):
-    reads_to_save = []
     print("Starting Message Processing")
-    if USE_LOCAL:
-        in_file = open("/Users/siakhnin/data/RMNISTHS_30xdownsample_9999999_11000000.mapped.sr.msgpack", "r")
-        read_source = msgpack.load(in_file,encoding='utf-8')
-        in_file.close()
-    else:
-        read_source = KafkaConsumer('mapped_reads',
+    consumer = KafkaConsumer('mapped_reads',
                              group_id='snp_caller',
                              bootstrap_servers=['localhost:9092'],
                              value_deserializer=lambda m: json.loads(m.decode('utf-8')))
@@ -249,7 +226,7 @@ def process_messages(processor_pipe, shared_all_loci):
     counter = 1
     saver_notified = False
 
-    for message in read_source:
+    for message in consumer:
         # message value and key are raw bytes -- decode if necessary!
         # e.g., for unicode: `message.value.decode('utf-8')`
         #print ("%s:%d:%d: key=%s value=%s" % (message.topic, message.partition,
@@ -266,25 +243,20 @@ def process_messages(processor_pipe, shared_all_loci):
             saver_notified = True
             print("Sending message to saver")
 
-        if USE_LOCAL:
-            my_read = message
-        else:
-            my_read = message.value
+        my_read = message.value
 
-        updated_loci.update(process_read(my_read, ref, 0, len(ref), shared_all_loci, reads_to_save))
-        shared_all_loci.update(updated_loci)
-        updated_loci = {}
+        updated_loci.update(process_read(my_read, ref, 0, len(ref), shared_all_loci))
+
         if counter % 1000 == 0:
-             print("Processed {} messages. Updating shared dictionary".format(counter))
-        #     ts = time.time()
-        #     shared_all_loci.update(updated_loci)
-        #     te = time.time()
-        #     print("Took {} to update {} loci".format(te - ts, len(updated_loci)))
-        #     updated_loci = {}
+            print("Processed {} messages. Updating shared dictionary".format(counter))
+            ts = time.time()
+            shared_all_loci.update(updated_loci)
+            te = time.time()
+            print("Took {} to update {} loci".format(te - ts, len(updated_loci)))
+            updated_loci = {}
             #break
         counter+=1
 
-    time.sleep(60)
 
 processor_pipe, saver_pipe = Pipe(duplex=True)
 manager = Manager()
@@ -300,7 +272,6 @@ p = Process(target=process_messages, args=(processor_pipe, shared_all_loci))
 p.start()
 p.join()
 
-pass
 # reads = msgpack.loads(reads_9999999_10001000_pack)
 # for my_read in reads:
 #     process_read(my_read, all_loci, ref, 0, len(ref))

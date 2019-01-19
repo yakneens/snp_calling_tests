@@ -36,8 +36,8 @@ def call_variants(input_file,
                   my_chr,
                   out_vcf,
                   base_rec,
-                  print_results=True, ):
-
+                  print_results=False, ):
+    hit_counter = 0
     my_snp = []
     for cur_pos in range(my_start, my_stop):
         my_locus_redis = redis_cli.get(cur_pos)
@@ -53,7 +53,7 @@ def call_variants(input_file,
             else:
                 vqual = 5000
             #       print vqual
-            if vqual > 20:
+            if vqual > 50:
                 res = (
                     cur_pos + 1, 0 if post_hom > post_het else 1, cur_locus.ref, cur_locus.alt, vqual, post_ref, post_het,
                 post_hom)
@@ -83,10 +83,12 @@ def call_variants(input_file,
                 #            the_sample['GL'] = cur_locus.get_log_gls()
                 the_sample['PL'] = cur_locus.get_pl()
                 the_sample['GQ'] = cur_locus.get_gq()
-                #out_vcf.write(new_rec)
+                out_vcf.write(new_rec)
+                hit_counter+=1
         else:
-            print("Locus {} not found".format(cur_pos))
-
+            pass
+            #print("Locus {} not found".format(cur_pos))
+    print("{} variants saved".format(hit_counter))
 
 # 63025520
 # 13025520
@@ -97,10 +99,10 @@ def call_test():
     for rec in in_vcf.fetch():
         base_rec = rec.copy()
         break
-    out_vcf = pysam.VariantFile("/Users/siakhnin/data//mnist_na12878_chrom20_100kb.rheos.kafka.vcf", "w",
+    out_vcf = pysam.VariantFile("/Users/siakhnin/data//mnist_na12878_chrom20_10mb.rheos.kafka.vcf", "w",
                                 header=in_vcf.header)
     call_variants(my_start=9999999,
-                  my_stop=10100000,
+                  my_stop=20000000,
                   my_chr="20",
                   input_file="/Users/siakhnin/data/giab/mnist_na12878_chrom20.bam",
                   reference_file="/Users/siakhnin/data/reference/genome.fa",
