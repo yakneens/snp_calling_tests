@@ -7,7 +7,7 @@ from kafka import KafkaConsumer
 import json
 import jsonpickle
 import redis
-from locus import Locus, q_chars_to_p_errors, q_chars_to_one_minus_p_errors, q_chars_to_qual
+from locus import Locus, q_chars_to_log_p_errors, q_chars_to_log_one_minus_p_errors, q_chars_to_qual
 import msgpack
 import string
 import unicodedata
@@ -18,13 +18,16 @@ import time
 import datetime
 import functools
 
+
 redis_cli = redis.Redis(host='localhost',port=6379)
+
 
 SAVED_MSG = "SAVED"
 NEW_MSG = "NEW"
 USE_REDIS = False
 USE_LOCAL = False
 all_loci = {}
+log_10_of_half = -0.301029995663981
 #rev_comp_lookup = string.maketrans(u'ACTG', u'TGAC')
 rev_comp_lookup = {ord(c): ord(t) for c,t in zip(u'ACTG', u'TGAC')}
 def comp(seq):
@@ -44,9 +47,9 @@ def ascii_to_qual(qual_str):
 
 def get_priors():
     heterozygosity = 0.8 * 0.001
-    prior_1 = heterozygosity
-    prior_0 = pow(heterozygosity, 2)
-    prior_2 = 1 - prior_1 - prior_0
+    prior_1 = log10(heterozygosity)
+    prior_0 = log10(pow(heterozygosity, 2))
+    prior_2 = log10(1 - prior_1 - prior_0)
     return (prior_0, prior_1, prior_2)
 
 (prior_0, prior_1, prior_2) = get_priors()
@@ -90,6 +93,8 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, 
 
     ref_stop = ref_start + match_len
 
+
+
     if ref_stop < my_start:
         return
     else:
@@ -120,30 +125,26 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, 
                         my_locus = Locus(pos=cur_ref + 1, ref=ref[cur_ref - my_start], alt=None, gl_ref=prior_2,
                                          gl_het=prior_1, gl_hom=prior_0, history=[])
 
-                p_error = q_chars_to_p_errors[qual[i]]
                 my_locus.dp += 1
 
-                my_locus.gl_het *= 0.5
+                my_locus.gl_het += log_10_of_half
 
                 if (seq[i] != ref[cur_ref - my_start]):
                     my_locus.alt = seq[i]
-                    my_locus.gl_ref *= p_error
 
-                    my_locus.gl_hom *= (1 - p_error)
+                    my_locus.gl_ref += q_chars_to_log_one_minus_p_errors[qual[i]]
+                    my_locus.gl_hom += q_chars_to_log_p_errors[qual[i]]
 
                     my_locus.ao += 1
                     my_locus.qa += q_chars_to_qual[qual[i]]
-
                 else:
-                    my_locus.gl_ref *= (1 - p_error)
-                    my_locus.gl_hom *= p_error
+                    my_locus.gl_ref += q_chars_to_log_p_errors[qual[i]]
+                    my_locus.gl_hom += q_chars_to_log_one_minus_p_errors[qual[i]]
+
                     my_locus.ro += 1
                     my_locus.qr += q_chars_to_qual[qual[i]]
 
                 # my_locus.add_to_history(my_locus.gl_ref)
-
-                #my_locus.update_gls_to_min_if_zero()
-                #TODO Maybe ok to take this out?
 
                 if USE_REDIS:
                     redis_cli.set(cur_ref, jsonpickle.encode(my_locus))
@@ -151,7 +152,6 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, 
                     all_loci[cur_ref] = my_locus
                     #shared_all_loci[cur_ref] = my_locus
                     updated_loci[cur_ref] = my_locus
-
     return updated_loci
 
 def process_read(read, ref, my_start, my_stop, shared_all_loci, reads_to_save):

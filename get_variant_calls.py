@@ -87,7 +87,7 @@ def call_variants(input_file,
                 hit_counter+=1
         else:
             pass
-            #print("Locus {} not found".format(cur_pos))
+            print("Locus {} not found".format(cur_pos))
     print("{} variants saved".format(hit_counter))
 
 # 63025520
@@ -99,10 +99,10 @@ def call_test():
     for rec in in_vcf.fetch():
         base_rec = rec.copy()
         break
-    out_vcf = pysam.VariantFile("/Users/siakhnin/data//mnist_na12878_chrom20_10mb.rheos.kafka.vcf", "w",
+    out_vcf = pysam.VariantFile("/Users/siakhnin/data//mnist_na12878_chrom20_100kb_test.rheos.kafka.vcf", "w",
                                 header=in_vcf.header)
     call_variants(my_start=9999999,
-                  my_stop=20000000,
+                  my_stop=10100000,
                   my_chr="20",
                   input_file="/Users/siakhnin/data/giab/mnist_na12878_chrom20.bam",
                   reference_file="/Users/siakhnin/data/reference/genome.fa",

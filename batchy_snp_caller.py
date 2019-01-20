@@ -12,7 +12,7 @@ import msgpack
 import string
 import unicodedata
 import cProfile
-from multiprocessing import Pool, Process, Pipe, Manager
+from multiprocessing import Pool, Process, Pipe, Manager, Event
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
 import datetime
@@ -27,6 +27,7 @@ USE_LOCAL = False
 all_loci = {}
 #rev_comp_lookup = string.maketrans(u'ACTG', u'TGAC')
 rev_comp_lookup = {ord(c): ord(t) for c,t in zip(u'ACTG', u'TGAC')}
+
 def comp(seq):
     return seq.translate(rev_comp_lookup)
 
@@ -154,42 +155,44 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop, 
 
     return updated_loci
 
-def process_read(read, ref, my_start, my_stop, shared_all_loci, reads_to_save):
+def process_reads(read_batch, ref, my_start, my_stop, shared_all_loci, reads_to_save):
     updated_loci = {}
 
-    strand = read['strand']
+    for read in read_batch:
+        strand = read['strand']
+        cigar_els = read['cigartuples'] if strand == 1 else read['cigartuples'][::-1]
 
-    cigar_els = read['cigartuples'] if strand == 1 else read['cigartuples'][::-1]
-
-    if not cigar_els:
-        print("Read {} has bad CIGAR {}, skipping".format(read.qname, read.cigar))
-        return
+        if not cigar_els:
+            print("Read {} has bad CIGAR {}, skipping".format(read.qname, read.cigar))
+            return
 
 
-    ref_offset = 0
+        ref_offset = 0
 
-    read_idx = read['qstart']
+        read_idx = read['qstart']
 
-    for el in cigar_els:
-        el_type = el[1]
-        el_len = el[0]
+        for el in cigar_els:
+            el_type = el[1]
+            el_len = el[0]
 
-        #0 is a match, 2 is a deletion, these consume reference sequence
-        if el_type == 0 or el_type == 2:
-            if el_type == 0:
-                updated_loci.update(handle_match(read, read_idx, el_len, ref_offset, ref, my_start, my_stop, shared_all_loci, reads_to_save))
-            ref_offset += el_len * strand
-        if el_type != 2 and el_type != 4:
-            read_idx += el_len
+            #0 is a match, 2 is a deletion, these consume reference sequence
+            if el_type == 0 or el_type == 2:
+                if el_type == 0:
+                    updated_loci.update(handle_match(read, read_idx, el_len, ref_offset, ref, my_start, my_stop, shared_all_loci, reads_to_save))
+                ref_offset += el_len * strand
+            if el_type != 2 and el_type != 4:
+                read_idx += el_len
 
-    return updated_loci
+        return updated_loci
 
 def reverse_neg_strand_read(read):
     return True
 
 @timeit
-def save_to_redis(saver_pipe, shared_all_loci):
+def save_to_redis(saver_pipe, shared_all_loci, save_triggered):
     print("Starting saving to Redis at {}".format(datetime.datetime.now()))
+    if not save_triggered.is_set():
+        save_triggered.set()
 
     if saver_pipe.poll():
 
@@ -197,24 +200,24 @@ def save_to_redis(saver_pipe, shared_all_loci):
         print(msg)
         if msg == NEW_MSG:
             redis_cli = redis.Redis(host='localhost', port=6379)
-            saver_pipe.send(SAVED_MSG)
             for key in shared_all_loci.keys():
                 my_locus = shared_all_loci[key]
-                #redis_cli.set(my_locus.pos - 1, jsonpickle.encode(my_locus))
+                redis_cli.set(my_locus.pos - 1, jsonpickle.encode(my_locus))
+            saver_pipe.send(SAVED_MSG)
         else:
             print("No new messages reported. Not saving to Redis this time.")
     else:
         print("No messages from process. Not saving to Redis this time.")
 
-def save_job(saver_pipe, shared_all_loci):
-    p = Process(target=save_to_redis, args=(saver_pipe, shared_all_loci))
+def save_job(saver_pipe, shared_all_loci, save_triggered):
+    p = Process(target=save_to_redis, args=(saver_pipe, shared_all_loci, save_triggered))
     p.start()
     p.join()
 
-def message_processor(processor_pipe, shared_all_loci):
-    cProfile.runctx("process_messages(processor_pipe, shared_all_loci)", globals(), locals(),'profile-processor.out')
+def message_processor(processor_pipe, shared_all_loci, save_triggered):
+    cProfile.runctx("process_messages(processor_pipe, shared_all_loci, save_triggered)", globals(), locals(),'profile-processor.out')
 
-def process_messages(processor_pipe, shared_all_loci):
+def process_messages(processor_pipe, shared_all_loci, save_triggered):
     reads_to_save = []
     print("Starting Message Processing")
     if USE_LOCAL:
@@ -222,7 +225,7 @@ def process_messages(processor_pipe, shared_all_loci):
         read_source = msgpack.load(in_file,encoding='utf-8')
         in_file.close()
     else:
-        read_source = KafkaConsumer('mapped_reads',
+        read_source = KafkaConsumer('mapped_reads_batchy',
                              group_id='snp_caller',
                              bootstrap_servers=['localhost:9092'],
                              value_deserializer=lambda m: json.loads(m.decode('utf-8')))
@@ -235,6 +238,7 @@ def process_messages(processor_pipe, shared_all_loci):
     reads_list = []
     counter = 1
     saver_notified = False
+    first_accumulation = True
 
     for message in read_source:
         # message value and key are raw bytes -- decode if necessary!
@@ -248,6 +252,16 @@ def process_messages(processor_pipe, shared_all_loci):
             if msg == SAVED_MSG:
                 saver_notified = False
 
+                ts = time.time()
+                shared_all_loci.clear()
+                te = time.time()
+                print("Took {} to clear shared_all_loci".format(te - ts))
+                ts = time.time()
+                shared_all_loci.update(updated_loci)
+                te = time.time()
+                print("Took {} to insert {} entries into shared_all_loci.".format(te - ts, len(updated_loci)))
+                updated_loci = {}
+
         if not saver_notified:
             processor_pipe.send(NEW_MSG)
             saver_notified = True
@@ -256,22 +270,25 @@ def process_messages(processor_pipe, shared_all_loci):
         if USE_LOCAL:
             my_read = message
         else:
-            my_read = message.value
+            my_read_batch = message.value
 
-        updated_loci.update(process_read(my_read, ref, 0, len(ref), shared_all_loci, reads_to_save))
-        shared_all_loci.update(updated_loci)
-        updated_loci = {}
-        if counter % 1000 == 0:
-             print("Processed {} messages. Updating shared dictionary".format(counter))
+        updated_loci.update(process_reads(my_read_batch, ref, 0, len(ref), shared_all_loci, reads_to_save))
+
+        if not save_triggered.is_set():
+            shared_all_loci.update(updated_loci)
+            updated_loci = {}
+
+        print("{}".format(len(my_read_batch)))
+        print("Processed {} messages. Updating shared dictionary".format(counter))
         #     ts = time.time()
         #     shared_all_loci.update(updated_loci)
         #     te = time.time()
         #     print("Took {} to update {} loci".format(te - ts, len(updated_loci)))
         #     updated_loci = {}
             #break
-        counter+=1
-        if counter > 20000:
-            break
+        # if counter > 14:
+        #     break
+        counter += 1
 
     #time.sleep(60)
 
@@ -279,12 +296,13 @@ def main():
     processor_pipe, saver_pipe = Pipe(duplex=True)
     manager = Manager()
     shared_all_loci = manager.dict()
+    save_triggered = manager.Event()
     scheduler = BackgroundScheduler()
-    #job = scheduler.add_job(save_job, 'interval', seconds=60, args=(saver_pipe, shared_all_loci))
-    job = scheduler.add_job(save_job, 'date', args=(saver_pipe, shared_all_loci))
+    job = scheduler.add_job(save_job, 'interval', seconds=20, args=(saver_pipe, shared_all_loci, save_triggered))
+    #job = scheduler.add_job(save_job, 'date', args=(saver_pipe, shared_all_loci))
     scheduler.start()
 
-    p = Process(target=message_processor, args=(processor_pipe, shared_all_loci))
+    p = Process(target=message_processor, args=(processor_pipe, shared_all_loci, save_triggered))
     p.start()
     p.join()
 

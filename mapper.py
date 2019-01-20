@@ -7,7 +7,7 @@ my_start = 9999999
 my_stop = 20000000
 my_chr = "20"
 reference_file = "/Users/siakhnin/data/reference/genome.mmi"
-sample_file = "/Users/siakhnin/data/giab/RMNISTHS_30xdownsample_9999999_20000000.name_sorted.fastq"
+sample_file = "/Users/siakhnin/data/giab/RMNISTHS_30xdownsample_9999999_10100000.name_sorted.fastq"
 print("Loading reference")
 ref = mp.Aligner(reference_file, preset="sr")
 print("Reference Loaded")
