@@ -15,8 +15,10 @@ import datetime
 
 import pickle
 import zlib
+import ujson
 
 
+SKIP_ALL = False
 KAFKA_SERVER="localhost:9092"
 all_loci = {}
 #rev_comp_lookup = string.maketrans(u'ACTG', u'TGAC')
@@ -120,7 +122,7 @@ def handle_match(read, read_idx, match_len, ref_offset, ref, my_start, my_stop):
     return updated_loci
 
 def deserialize_read_msg(m):
-    return json.loads(m.decode('utf-8'))
+    return ujson.loads(m.decode('utf-8'))
 
 def get_reads_source():
     consumer = KafkaConsumer('mapped_reads_batchy',
@@ -142,6 +144,9 @@ def process_reads(read_batch, ref, my_start, my_stop):
     updated_loci = {}
 
     for read in read_batch:
+        if SKIP_ALL:
+            continue
+
         strand = read['strand']
         cigar_els = read['cigartuples'] if strand == 1 else read['cigartuples'][::-1]
 
@@ -196,7 +201,7 @@ def process_messages():
 
 def main():
     cProfile.runctx("process_messages()", globals(), locals(),
-                    'profile-processor.out')
+                    'profile-batchy-snp-caller.out')
 
 if __name__ == "__main__":
     main()
