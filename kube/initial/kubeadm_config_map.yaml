@@ -1,0 +1,30 @@
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+    cloud-provider: "openstack"
+    cloud-config: "/etc/kubernetes/cloud.conf"
+---
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+kubernetesVersion: v1.13.0
+apiServer:
+  extraArgs:
+    cloud-provider: "openstack"
+    cloud-config: "/etc/kubernetes/cloud.conf"
+  extraVolumes:
+  - name: cloud
+    hostPath: "/etc/kubernetes/cloud.conf"
+    mountPath: "/etc/kubernetes/cloud.conf"
+controllerManager:
+  extraArgs:
+    cloud-provider: "openstack"
+    cloud-config: "/etc/kubernetes/cloud.conf"
+  extraVolumes:
+  - name: cloud
+    hostPath: "/etc/kubernetes/cloud.conf"
+    mountPath: "/etc/kubernetes/cloud.conf"
+networking:
+  dnsDomain: cluster.local
+  podSubnet: 192.169.0.0/16
+  serviceSubnet: 10.96.0.0/12

@@ -53,7 +53,7 @@ for name, seq, qual in mp.fastx_read(sample_file):
             counter += 1
 
             if(len(hits) % 1500 == 0):
-                producer.send('mapped_reads_batchy', hits, partition=get_partition(hit_dict), key="{}:{}".format(hit_dict['contig'], hit_dict['pos']))
+                producer.send('mapped_reads_batchy', hits, partition=get_partition(hit_dict))
                 hits = []
                 print("{} reads processed".format(counter))
 
@@ -63,7 +63,7 @@ for name, seq, qual in mp.fastx_read(sample_file):
             #print "Read maps to {}. Discarding".format(hit.ctg)
 
 if(len(hits) > 0):
-    producer.send('mapped_reads_batchy', hits, partition=get_partition(hit_dict), key="{}:{}".format(hit_dict['contig'], hit_dict['pos']))
+    producer.send('mapped_reads_batchy', hits, partition=get_partition(hit_dict))
     hits = []
     print("{} reads processed".format(counter))
 

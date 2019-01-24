@@ -1,47 +1,22 @@
 #!/bin/bash
-export GATK=/Users/siakhnin/tools/gatk4/gatk/build/libs/gatk.jar
-export PICARD=/Users/siakhnin/tools/picard/dist/picard.jar
 
 DATA_PREF=/Users/siakhnin/data
-mkdir ${DATA_PREF}/reports
+SOURCE_VCF=${DATA_PREF}/giab/HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz
+REGION="20:9999999-13000000"
+FLANK=5
+RESULT_FILENAME=${DATA_PREF}/na12878_giab_highconf.9999999-13000000.deletions.5bp_flank_sorted_merged.bed
 
-SAMPLE=${DATA_PREF}/mnist_na12878_chrom20_100kb.rheos.kafka.no_dels.vcf
-GATK_VCF=${DATA_PREF}/mnist_na12878_chrom20.100kb.gatk4.filtered.vcf
-FB_VCF=${DATA_PREF}/mnist_na12878_chrom20.100kb.freebayes.minimap.filtered.vcf
-GIAB_VCF=${DATA_PREF}/na12878_giab_highconf.9999999-10100000.filtered.vcf
+GET_INDELS_CMD="bcftools view -r ${REGION} -v indels -M2 ${SOURCE_VCF} "
+GET_DELS_BED_CMD="vcf2bed --deletions - "
+FLANK_CMD="bedtools flank -b 5 -g ${DATA_PREF}/reference/genome.bed.ref "
+SORT_CMD="bedtools sort "
+MERGE_CMD="bedtools merge "
 
-java -jar ${PICARD} GenotypeConcordance \
-CALL_VCF=${SAMPLE} \
-TRUTH_VCF=${FB_VCF} \
-O=${DATA_PREF}/reports/freebayes_to_rheos \
-TRUTH_SAMPLE=NA12878 CALL_SAMPLE=NA12878
-
-java -jar ${PICARD} GenotypeConcordance \
-CALL_VCF=${SAMPLE} \
-TRUTH_VCF=${GIAB_VCF} \
-O=${DATA_PREF}/reports/giab_to_rheos \
-TRUTH_SAMPLE=HG001 CALL_SAMPLE=NA12878
-
-java -jar ${PICARD} GenotypeConcordance \
-CALL_VCF=${SAMPLE} \
-TRUTH_VCF=${GATK_VCF} \
-O=${DATA_PREF}/reports/gatk4_go_rheos \
-TRUTH_SAMPLE=NA12878 CALL_SAMPLE=NA12878
-
-vcftools --vcf \
-${GIAB_VCF} \
---diff ${SAMPLE} \
---diff-site \
---out ${DATA_PREF}/reports/giab_to_rheos
-
-vcftools --vcf \
-${FB_VCF} \
---diff ${SAMPLE} \
---diff-site \
---out ${DATA_PREF}/reports/freebayes_to_rheos
-
-vcftools --vcf \
-${GATK_VCF} \
---diff ${SAMPLE} \
---diff-site \
---out ${DATA_PREF}/reports/gatk4_to_rheos
+FULL_CMD="${GET_INDELS_CMD} | \
+ ${GET_DELS_BED_CMD} | \
+ ${FLANK_CMD} | \
+ ${SORT_CMD} | \
+ ${MERGE_CMD} > \
+ ${RESULT_FILENAME}"
+printf "${FULL_CMD}"
+eval ${FULL_CMD}

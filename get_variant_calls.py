@@ -6,6 +6,7 @@ from locus import Locus
 from math import log10
 import timeit
 import pysam
+import pickle
 
 
 def to_phred(x):
@@ -15,7 +16,7 @@ def from_phred(x):
     return pow(10, -x/10)
 
 def ascii_to_qual(qual_str):
-    return map(lambda(x): ord(x) - 33, qual_str)
+    return map(lambda x: ord(x) - 33, qual_str)
 
 def get_priors():
     heterozygosity = 0.8 * 0.001
@@ -43,8 +44,8 @@ def call_variants(input_file,
         my_locus_redis = redis_cli.get(cur_pos)
 
         if my_locus_redis:
-            cur_locus = jsonpickle.decode(my_locus_redis, classes=Locus)
-
+            cur_locus = pickle.loads(my_locus_redis)
+            cur_locus.update_gls_to_min_if_zero()
             (post_ref, post_het, post_hom) = cur_locus.get_norm_gls()
 
             vqual = 0
@@ -99,10 +100,10 @@ def call_test():
     for rec in in_vcf.fetch():
         base_rec = rec.copy()
         break
-    out_vcf = pysam.VariantFile("/Users/siakhnin/data//mnist_na12878_chrom20_100kb_test.rheos.kafka.vcf", "w",
+    out_vcf = pysam.VariantFile("/Users/siakhnin/data//mnist_na12878_chrom20_50000000-63025520_test.rheos.kafka.vcf", "w",
                                 header=in_vcf.header)
-    call_variants(my_start=9999999,
-                  my_stop=10100000,
+    call_variants(my_start=50000000,
+                  my_stop=63025520,
                   my_chr="20",
                   input_file="/Users/siakhnin/data/giab/mnist_na12878_chrom20.bam",
                   reference_file="/Users/siakhnin/data/reference/genome.fa",
