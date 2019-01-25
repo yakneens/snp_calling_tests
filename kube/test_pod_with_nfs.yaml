@@ -4,17 +4,22 @@ metadata:
   name: test-nfs-pod
 spec:
   volumes:
-    - name: pan-prostate-nfs
-      persistentVolumeClaim:
-        claimName: pan-prostate-pvc
+  - name: pan-prostate-nfs
+    persistentVolumeClaim:
+      claimName: pan-prostate-pvc
+  - name: redis-storage
+    persistentVolumeClaim:
+      claimName: redis-store-pvc
   containers:
-    - name: test-nfs-pod
-      image: llevar/test_repo:centos-template-sergei
-      imagePullPolicy: IfNotPresent
-      volumeMounts:
-        - mountPath: /pan-prostate
-          name: pan-prostate-nfs
-      command: ["df"]
-      args: ["-h"]
+  - name: test-nfs-pod
+    image: llevar/test_repo:centos-template-sergei
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+    - mountPath: /pan-prostate
+      name: pan-prostate-nfs
+    - mountPath: /redis-storage
+      name: redis-storage
+    command: ["df"]
+    args: ["-h"]
   restartPolicy: Never
 
