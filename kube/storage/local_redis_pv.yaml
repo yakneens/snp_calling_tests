@@ -3,6 +3,11 @@ kind: PersistentVolume
 metadata:
   name: redis-pv
 spec:
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: redis-store-pvc
+    namespace: default
   capacity:
     storage: 94Gi
   volumeMode: Filesystem

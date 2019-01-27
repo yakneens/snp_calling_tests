@@ -9,11 +9,11 @@
 ##
 image:
   registry: docker.io
-  repository: bitnami/redis
+  repository: llevar/test_repo
   ## Bitnami Redis image tag
   ## ref: https://github.com/bitnami/bitnami-docker-redis#supported-tags-and-respective-dockerfile-links
   ##
-  tag: 5.0.3
+  tag: redis-with-nettools
   ## Specify a imagePullPolicy
   ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
   ## ref: http://kubernetes.io/docs/user-guide/images/#pre-pulling-images
@@ -41,7 +41,7 @@ networkPolicy:
   ## on. When true, Redis will accept connections from any source
   ## (with the correct destination port).
   ##
-  # allowExternal: true
+  #allowExternal: true
 
 serviceAccount:
   ## Specifies whether a ServiceAccount should be created
@@ -83,7 +83,7 @@ password:
 usePasswordFile: false
 
 ## Persist data to a persistent volume
-persistence: {redis-store-pvc}
+persistence: 
   ## A manually managed Persistent Volume and Claim
   ## Requires persistence.enabled: true
   ## If defined, PVC must be created manually before volume will be bound
@@ -197,7 +197,7 @@ master:
     path: /redis-store
     ## The subdirectory of the volume to mount to, useful in dev environments
     ## and one PV for multiple services.
-    subPath: /data
+    subPath: data
     ## redis data Persistent Volume Storage Class
     ## If defined, storageClassName: <storageClass>
     ## If set to "-", storageClassName: "", which disables dynamic provisioning
@@ -377,4 +377,5 @@ volumePermissions:
 ## ref: https://redis.io/topics/config
 ##
 configmap: |-
+  bind 0.0.0.0
   # maxmemory-policy volatile-lru
