@@ -61,9 +61,9 @@ cp-kafka:
   #   cpu: 100m
   #   memory: 128Mi
   configurationOverrides:
-    "socket.request.max.bytes":2004857600
-    "message.max.bytes":1000000012
-    "replica.fetch.max.bytes":1000000015
+  "socket.request.max.bytes":2004857600
+  "message.max.bytes":1000000012
+  "replica.fetch.max.bytes":1000000015
 
 ## ------------------------------------------------------
 ## Schema Registry
