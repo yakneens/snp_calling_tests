@@ -1,0 +1,7 @@
+redis>=3.0.1
+pysam>=0.15.2
+mappy>=2.15
+kafka-python>=1.4.4
+ujson>=1.35
+bashplotlib>=0.6.5
+docopt>=0.6.2
