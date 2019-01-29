@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: zk-pv-1
+spec:
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: zk-pvc-1
+    namespace: default
+  capacity:
+    storage: 64Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  local:
+    path: /zk-store
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-4
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zk-pvc-1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 64Gi
+  volumeName: zk-pv-1
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: zk-pv-2
+spec:
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: zk-pvc-2
+    namespace: default
+  capacity:
+    storage: 64Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  local:
+    path: /zk-store
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-5
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zk-pvc-2
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 64Gi
+  volumeName: zk-pv-2
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: zk-pv-3
+spec:
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: zk-pvc-3
+    namespace: default
+  capacity:
+    storage: 64Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  local:
+    path: /zk-store
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-6
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zk-pvc-3
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 64Gi
+  volumeName: zk-pv-3
