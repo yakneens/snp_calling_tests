@@ -66,4 +66,4 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - worker-2
+          - worker-3
