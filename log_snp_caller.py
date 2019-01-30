@@ -1,23 +1,16 @@
 import pysam
 from math import log10
-from random import shuffle
-import timeit
-import sys
 from kafka import KafkaConsumer
 import json
 import jsonpickle
 import redis
-from locus import Locus, q_chars_to_log_p_errors, q_chars_to_log_one_minus_p_errors, q_chars_to_qual
+from model.locus import Locus, q_chars_to_log_p_errors, q_chars_to_log_one_minus_p_errors, q_chars_to_qual
 import msgpack
-import string
-import unicodedata
 import cProfile
-from multiprocessing import Pool, Process, Pipe, Manager
+from multiprocessing import Process, Pipe, Manager
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
 import datetime
-import functools
-
 
 redis_cli = redis.Redis(host='localhost',port=6379)
 

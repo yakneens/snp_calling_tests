@@ -1,12 +1,42 @@
+"""Batchy Mapper
+
+Usage:
+    batchy_mapper.py file -i <input> [-g <chr>:<start>-<stop>] -r <ref> -k <kafka_url> [--bin_size=<bin_size>] [--num_bins=<num_bins>] [--check_freq=<check_freq>]
+    batchy_mapper.py service -r <ref> -k <kafka_url> [--bin_size=<bin_size>] [--num_bins=<num_bins>] [--check_freq=<check_freq>]
+    batchy_mapper.py (-h | --help)
+
+Options:
+    -h, --help  show help
+    -i <input> path to input file
+    -g <region> genome region using <chr>:<start>-<stop> format
+    -r <ref> path to reference file
+    -k <kafka_url> kafka broker URL
+    --bin_size=<bin_size>  how many items fit in a bin before it is sent
+    --num_bins=<num_bins>  number of bins
+    --check_freq=<check_freq>  how often to check whether any bins are ready to send (measured in number of reads mapped)
+
+"""
+
+
 import mappy as mp
 from kafka import KafkaProducer
-from json import dumps
-import msgpack
 import ujson
 import cProfile
 from math import floor
 from bashplotlib.histogram import plot_hist
-import matplotlib.pyplot as plt
+import util.logging as my_log
+import logging
+import datetime
+from docopt import docopt
+
+
+KAFKA_MAX_REQUEST_SIZE=100000000
+KAFKA_TOPIC_NAME='mapped_reads_batchy'
+KAFKA_BROKER_URL='localhost:9092'
+
+BIN_SIZE=10000
+NUM_BINS=100
+CHECK_FREQ=1000
 
 def get_partition(rec):
     return 0 #TODO: remove this
@@ -27,7 +57,7 @@ class Reservoir(object):
         self.right = right
         self.num_bins = num_bins
         self.bin_width = floor((right-left)/num_bins)
-        self.bins = [[] for i in range(num_bins)]
+        self.bins = [[] for _ in range(num_bins)]
 
     def put_in_bin(self, obj, place):
         bin_index = self.get_bin_index(place)
@@ -68,19 +98,16 @@ class Reservoir(object):
     def get_bin_fullness(self):
         return [len(bin) for bin in self.bins]
 
-def run_mapper():
-    my_start = 50000000
-    my_stop = 63025520
-    my_chr = "20"
-    reference_file = "/Users/siakhnin/data/reference/genome.mmi"
-    sample_file = "/Users/siakhnin/data/giab/RMNISTHS_30xdownsample_50000000-63025520.name_sorted.fastq"
-    print("Loading reference")
-    ref = mp.Aligner(reference_file, preset="sr")
-    print("Reference Loaded")
+def run_mapper(my_start, my_stop, my_contig, ref_path, sample_path, logger):
+
+    logger.info("Loading reference")
+    ref = mp.Aligner(ref_path, preset="sr")
+    logger.info("Reference Loaded")
+
     bin_counter = 0
-    producer = KafkaProducer(bootstrap_servers=['localhost:9092'],
+    producer = KafkaProducer(bootstrap_servers=[KAFKA_BROKER_URL],
                              value_serializer=serialize_read_msg,
-                             max_request_size=100000000)
+                             max_request_size=KAFKA_MAX_REQUEST_SIZE)
 
     accum = []
 
@@ -88,17 +115,17 @@ def run_mapper():
 
     counter = 0
 
-    max_bin_size = 10000
-    num_bins = 100
+    max_bin_size = BIN_SIZE
+    num_bins = NUM_BINS
     my_reservoir = Reservoir(my_start, my_stop, num_bins, max_bin_size)
     # fig, ax = plt.subplots(1, 1)
     # ax.set_xlim(0, int(max_bin_size*1.1))
     # plt.show()
-    for name, seq, qual in mp.fastx_read(sample_file):
+    for name, seq, qual in mp.fastx_read(sample_path):
         hit_count = 1
 
         for hit in ref.map(seq):
-            if hit.ctg == "20":
+            if hit.ctg == my_contig:
                 hit_dict = {}
                 hit_dict['contig'] = hit.ctg
                 hit_dict['cigar'] = hit.cigar_str
@@ -121,7 +148,7 @@ def run_mapper():
 
                 my_reservoir.put_in_bin(hit_dict, hit.r_st)
 
-                if(counter % 10000 == 0):
+                if(counter % CHECK_FREQ == 0):
                     plot_hist(my_reservoir.get_bin_fullness(), bincount=int(num_bins/10), xlab=True, height=10)
                     # ax.cla()
                     # #ax.set_xlim(0, int(max_bin_size * 1.1))
@@ -130,11 +157,11 @@ def run_mapper():
                     full_bins = my_reservoir.get_all_full_bins()
                     bin_indices_to_empty = []
                     for ind, bin in full_bins:
-                        producer.send('mapped_reads_batchy', bin, partition=get_partition(hit_dict))
+                        producer.send(KAFKA_TOPIC_NAME, bin, partition=get_partition(hit_dict))
                         producer.flush()
                         bin_indices_to_empty.append(ind)
                         bin_counter+=1
-                        print(f"Message {bin_counter}. Sending full bin {ind} to the broker")
+                        logger.info(f"Message {bin_counter}. Sending full bin {ind} to the broker")
 
                     my_reservoir.empty_bins(bin_indices_to_empty)
 
@@ -149,8 +176,8 @@ def run_mapper():
                 #print "Read maps to {}. Discarding".format(hit.ctg)
 
     for ind, bin in enumerate(my_reservoir.get_all_bins()):
-        producer.send('mapped_reads_batchy', bin, partition=get_partition(hit_dict))
-        print(f"Sending bin {ind} with {len(bin)} items to the broker")
+        producer.send(KAFKA_TOPIC_NAME, bin, partition=get_partition(hit_dict))
+        logger.info(f"Sending bin {ind} with {len(bin)} items to the broker")
         producer.flush()
 
 
@@ -160,16 +187,45 @@ def run_mapper():
     #     hits = []
     #     print("{} reads processed".format(counter))
 
-    print(counter)
-    print(accum)
+    logger.info(counter)
+    logger.info(accum)
 
-def main():
-    cProfile.runctx("run_mapper()", globals(), locals(),
-                    'profile-batchy-mapper.out')
+def main(start, stop, contig, ref_path, sample_path):
+    logger = my_log.SetupLogger("mapper")
+    logger.setLevel(logging.INFO)
+    logger.info(f"now is {datetime.datetime.now()}", )
+
+    run_mapper(start, stop, contig, ref_path, sample_path, logger)
+    # cProfile.runctx("run_mapper()", globals(), locals(),
+    #                 'profile-batchy-mapper.out')
 
 if __name__ == "__main__":
-    main()
+    my_start = 50000000
+    my_stop = 63025520
+    my_chr = "20"
+    reference_file = "/Users/siakhnin/data/reference/genome.mmi"
+    sample_file = "/Users/siakhnin/data/giab/RMNISTHS_30xdownsample_50000000-63025520.name_sorted.fastq"
+    args = docopt(__doc__, version="Batchy Mapper 0.0.1")
 
+    if(args['file']):
+        sample_file = args['-i']
+        reference_file = args['-r']
+        region = args['-g']
+        split_region = region.split(":")
+        my_chr = split_region[0]
+        start_stop_region = split_region[1].split("-")
+        my_start = start_stop_region[0]
+        my_stop = start_stop_region[1]
+
+        BIN_SIZE = args.get('--bin_size', BIN_SIZE)
+        NUM_BINS = args.get('--num-bins', NUM_BINS)
+        CHECK_FREQ = args.get('--check-freq', CHECK_FREQ)
+
+        KAFKA_BROKER_URL = args['-k']
+
+        main(my_start, my_stop, my_chr, reference_file, sample_file)
+    else:
+        print("Service mode not yet supported")
 # out_file = open("/Users/siakhnin/data/RMNISTHS_30xdownsample_9999999_11000000.mapped.sr.msgpack","w")
 # msgpack.dump(hits, out_file, encoding='utf-8')
 # out_file.close()

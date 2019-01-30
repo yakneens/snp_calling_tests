@@ -12,7 +12,7 @@ def SetupLogger(name_prefix):
     handler.setFormatter(recfmt)
     handler.setLevel(logging.DEBUG)
 
-    logger = logging.getLogger(name_prefix)
+    logger = logging.getLogger(f"{name_prefix} {__name__}")
     logger.addHandler(handler)
 
     return logger

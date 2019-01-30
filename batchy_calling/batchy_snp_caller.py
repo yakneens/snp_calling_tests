@@ -1,12 +1,8 @@
 import pysam
 from math import log10
-from random import shuffle
-import timeit
-import sys
 from kafka import KafkaConsumer, KafkaProducer
-import json
 
-from locus import Locus, q_chars_to_p_errors, q_chars_to_one_minus_p_errors, q_chars_to_qual
+from model.locus import Locus, q_chars_to_p_errors, q_chars_to_qual
 
 import cProfile
 

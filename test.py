@@ -1,4 +1,4 @@
-from locus import Locus
+from model.locus import Locus
 import jsonpickle
 
 l = Locus(pos=1211, ref=123454, alt=None, gl_ref=0, gl_het=0,

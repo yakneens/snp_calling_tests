@@ -1,8 +1,4 @@
-import pysam
-import jsonpickle
-import json
 import redis
-from locus import Locus
 from math import log10
 import timeit
 import pysam
