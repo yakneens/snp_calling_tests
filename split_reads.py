@@ -1,13 +1,5 @@
 import pysam
 from math import log10
-from random import shuffle
-import timeit
-from sortedcontainers import SortedDict, SortedList, SortedSet
-import math
-
-from variant_candidate import VariantCandidate
-from variant_candidate_collection import VariantCandidateCollection
-from model.read_pair import ReadPair
 
 DEL_TYPE = 0
 INS_TYPE = 1

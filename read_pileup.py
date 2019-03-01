@@ -50,7 +50,7 @@ def call_variants(input_file,
         pos = el.reference_pos + 1
         
         if print_results and pos % 1000000 == 0:
-            print pos
+            print(pos)
         
         ref_ind = el.reference_pos - my_start
         
@@ -147,7 +147,7 @@ def call_variants(input_file,
             my_snp.append(rec)
             #print pos
             if print_results:
-                print rec
+                print(rec)
                 #print read_ids
                 
             f.write(str(rec))
@@ -155,7 +155,7 @@ def call_variants(input_file,
 
             
     f.close()
-    print len(my_snp)
+    print(len(my_snp))
     return my_snp
 
 #my_start = 1
@@ -193,5 +193,5 @@ def call_no_log():
               use_log=False,
               print_results=True))
     
-print timeit.timeit(call_no_log, number=1)
-print timeit.timeit(call_with_log, number=1)
+print(timeit.timeit(call_no_log, number=1))
+print(timeit.timeit(call_with_log, number=1))

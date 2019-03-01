@@ -205,7 +205,7 @@ def save_job(saver_pipe, shared_all_loci):
 def process_messages(processor_pipe, shared_all_loci):
     print("Starting Message Processing")
     consumer = KafkaConsumer('mapped_reads',
-                             group_id='snp_caller',
+                             group_id='rheos_common',
                              bootstrap_servers=['localhost:9092'],
                              value_deserializer=lambda m: json.loads(m.decode('utf-8')))
 
